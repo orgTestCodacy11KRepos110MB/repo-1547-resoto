@@ -813,8 +813,10 @@ models: Dict[str, List[AwsResotoModel]] = {
         # ),
     ],
     "s3": [
-        # AwsResotoModel(#     "list-buckets", "Buckets", "Bucket", prefix="S3", prop_prefix="s3_"
-        # )
+        # AwsResotoModel("list-buckets", "Buckets", "Bucket", prefix="S3", prop_prefix="s3_"),
+        # AwsResotoModel(
+        #     "get-bucket-encryption", "ServerSideEncryptionConfiguration", "GetBucketEncryptionOutput", prefix="S3"
+        # ),
     ],
     "service-quotas": [
         # AwsResotoModel("list-service-quotas", "Quotas", "ServiceQuota", prefix="Quota", prop_prefix="quota_")
@@ -844,6 +846,6 @@ models: Dict[str, List[AwsResotoModel]] = {
 
 
 if __name__ == "__main__":
-    print(json.dumps(create_test_response("lambda", "get-function-url-config"), indent=2))
+    print(json.dumps(create_test_response("s3control", "get-public-access-block"), indent=2))
     # for model in all_models():
     #     print(model.to_class())

@@ -8,6 +8,7 @@ from resoto_plugin_aws.resource.s3 import AwsS3Bucket
 def test_buckets() -> None:
     first, builder = round_trip_for(AwsS3Bucket)
     assert len(builder.resources_of(AwsS3Bucket)) == 3
+    assert len(first.bucket_encryption_rules) == 1
     assert first.arn == "arn:aws:s3:::bucket-1"
     assert len(first.tags) == 1
 
