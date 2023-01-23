@@ -9,7 +9,7 @@ from resoto_plugin_aws.aws_client import AwsClient
 from resoto_plugin_aws.resource.base import AwsResource, AwsApiSpec, GraphBuilder
 from resoto_plugin_aws.utils import tags_as_dict
 from resotocore.model.typed_model import from_js
-from resotolib.baseresources import BaseBucket
+from resotolib.baseresources import BaseBucket, PhantomBaseResource, ModelReference
 from resotolib.json_bender import Bender, S, bend
 from resotolib.types import Json
 
@@ -28,6 +28,21 @@ class AwsS3ServerSideEncryptionRule:
 
 
 @define(eq=False, slots=False)
+class AwsS3PublicAccessBlockConfiguration:
+    kind: ClassVar[str] = "aws_s3_public_access_block_configuration"
+    mapping: ClassVar[Dict[str, Bender]] = {
+        "block_public_acls": S("BlockPublicAcls"),
+        "ignore_public_acls": S("IgnorePublicAcls"),
+        "block_public_policy": S("BlockPublicPolicy"),
+        "restrict_public_buckets": S("RestrictPublicBuckets"),
+    }
+    block_public_acls: Optional[bool] = field(default=False)
+    ignore_public_acls: Optional[bool] = field(default=False)
+    block_public_policy: Optional[bool] = field(default=False)
+    restrict_public_buckets: Optional[bool] = field(default=False)
+
+
+@define(eq=False, slots=False)
 class AwsS3Bucket(AwsResource, BaseBucket):
     kind: ClassVar[str] = "aws_s3_bucket"
     api_spec: ClassVar[AwsApiSpec] = AwsApiSpec(
@@ -38,10 +53,18 @@ class AwsS3Bucket(AwsResource, BaseBucket):
     bucket_policy: Optional[Json] = field(default=None)
     bucket_versioning: Optional[bool] = field(default=None)
     bucket_mfa_delete: Optional[bool] = field(default=None)
+    bucket_public_access_block_configuration: Optional[AwsS3PublicAccessBlockConfiguration] = field(default=None)
 
     @classmethod
     def called_collect_apis(cls) -> List[AwsApiSpec]:
-        return [cls.api_spec, AwsApiSpec("s3", "get-bucket-tagging")]
+        return [
+            cls.api_spec,
+            AwsApiSpec("s3", "get-bucket-tagging"),
+            AwsApiSpec("s3", "get-bucket-encryption"),
+            AwsApiSpec("s3", "get-bucket-policy"),
+            AwsApiSpec("s3", "get-bucket-versioning"),
+            AwsApiSpec("s3", "get-public-access-block"),
+        ]
 
     @classmethod
     def collect(cls: Type[AwsResource], json: List[Json], builder: GraphBuilder) -> None:
@@ -81,6 +104,18 @@ class AwsS3Bucket(AwsResource, BaseBucket):
                     bck.bucket_versioning = False
                     bck.bucket_mfa_delete = False
 
+        def add_public_access(bck: AwsS3Bucket) -> None:
+            with suppress(Exception):
+                if raw_access := builder.client.get(
+                    "s3",
+                    "get-public-access-block",
+                    "PublicAccessBlockConfiguration",
+                    Bucket=bck.name,
+                    expected_errors=["NoSuchPublicAccessBlockConfiguration"],
+                ):
+                    mapped = bend(AwsS3PublicAccessBlockConfiguration.mapping, raw_access)
+                    bck.bucket_public_access_block_configuration = from_js(mapped, AwsS3PublicAccessBlockConfiguration)
+
         for js in json:
             bucket = cls.from_api(js)
             bucket.set_arn(builder=builder, region="", account="", resource=bucket.safe_name)
@@ -89,6 +124,7 @@ class AwsS3Bucket(AwsResource, BaseBucket):
             builder.submit_work(add_bucket_encryption, bucket)
             builder.submit_work(add_bucket_policy, bucket)
             builder.submit_work(add_bucket_versioning, bucket)
+            builder.submit_work(add_public_access, bucket)
 
     def _set_tags(self, client: AwsClient, tags: Dict[str, str]) -> bool:
         tag_set = [{"Key": k, "Value": v} for k, v in tags.items()]
@@ -143,4 +179,41 @@ class AwsS3Bucket(AwsResource, BaseBucket):
         ]
 
 
-resources: List[Type[AwsResource]] = [AwsS3Bucket]
+@define(eq=False)
+class AwsS3AccountSettings(AwsResource, PhantomBaseResource):
+    """
+    This resource is fetched once for every account.
+    """
+
+    kind: ClassVar[str] = "aws_s3_account_settings"
+    reference_kinds: ClassVar[ModelReference] = {
+        "successors": {"default": ["aws_account"]},
+    }
+    api_spec: ClassVar[AwsApiSpec] = AwsApiSpec(
+        "s3control", "get-public-access-block", "PublicAccessBlockConfiguration"
+    )
+
+    bucket_public_access_block_configuration: Optional[AwsS3PublicAccessBlockConfiguration] = field(default=None)
+
+    @classmethod
+    def collect_resources(cls: Type[AwsResource], builder: GraphBuilder) -> None:
+        node = AwsS3AccountSettings(
+            id=builder.account.id,
+            name=builder.account.name,
+            ctime=builder.account.ctime,
+            bucket_public_access_block_configuration=AwsS3PublicAccessBlockConfiguration(),
+        )
+        if raw := builder.client.get(
+            "s3control",
+            "get-public-access-block",
+            "PublicAccessBlockConfiguration",
+            AccountId=builder.account.id,
+            expected_errors=["NoSuchPublicAccessBlockConfiguration"],
+        ):
+            mapped = bend(AwsS3PublicAccessBlockConfiguration.mapping, raw)
+            node.bucket_public_access_block_configuration = (from_js(mapped, AwsS3PublicAccessBlockConfiguration),)
+        builder.add_node(node)
+        builder.add_edge(builder.account, node=node)
+
+
+resources: List[Type[AwsResource]] = [AwsS3AccountSettings, AwsS3Bucket]

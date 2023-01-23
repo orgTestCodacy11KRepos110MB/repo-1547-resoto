@@ -2,7 +2,7 @@ from test.resources import round_trip_for
 from types import SimpleNamespace
 from typing import cast, Any, Callable
 from resoto_plugin_aws.aws_client import AwsClient
-from resoto_plugin_aws.resource.s3 import AwsS3Bucket
+from resoto_plugin_aws.resource.s3 import AwsS3Bucket, AwsS3AccountSettings
 
 
 def test_buckets() -> None:
@@ -11,6 +11,10 @@ def test_buckets() -> None:
     assert len(first.bucket_encryption_rules) == 1
     assert first.arn == "arn:aws:s3:::bucket-1"
     assert len(first.tags) == 1
+
+
+def test_s3_account_settings() -> None:
+    round_trip_for(AwsS3AccountSettings)
 
 
 def test_tagging() -> None:

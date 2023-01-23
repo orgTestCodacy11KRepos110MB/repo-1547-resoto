@@ -90,7 +90,7 @@ class AwsModel:
 class AwsResotoModel:
     api_action: str  # action to perform on the client
     result_property: str  # this property holds the resulting list
-    result_shape: str  # the shape of the result according to the service specification
+    result_shape: Optional[str] = None  # the shape of the result according to the service specification
     prefix: Optional[str] = None  # prefix for the resources
     prop_prefix: Optional[str] = None  # prefix for the attributes
     name: Optional[str] = None  # name of the clazz - uses the shape name by default
@@ -234,10 +234,14 @@ def clazz_model(
 def all_models() -> List[AwsModel]:
     visited: Set[str] = set()
     result: List[AwsModel] = []
-    for name, endpoint in models.items():
+    for name, endpoints in models.items():
         sm = service_model(name)
-        for ep in endpoint:
-            shape = sm.shape_for(ep.result_shape)
+        for ep in endpoints:
+            shape = (
+                sm.shape_for(ep.result_shape)
+                if ep.result_shape
+                else sm.operation_model(pascalcase(ep.api_action)).output_shape
+            )
             result.extend(
                 clazz_model(
                     shape,
@@ -817,6 +821,7 @@ models: Dict[str, List[AwsResotoModel]] = {
         # AwsResotoModel(
         #     "get-bucket-encryption", "ServerSideEncryptionConfiguration", "GetBucketEncryptionOutput", prefix="S3"
         # ),
+        # AwsResotoModel("get-public-access-block", "PublicAccessBlockConfiguration", prefix="S3"),
     ],
     "service-quotas": [
         # AwsResotoModel("list-service-quotas", "Quotas", "ServiceQuota", prefix="Quota", prop_prefix="quota_")
@@ -846,6 +851,9 @@ models: Dict[str, List[AwsResotoModel]] = {
 
 
 if __name__ == "__main__":
-    print(json.dumps(create_test_response("s3control", "get-public-access-block"), indent=2))
-    # for model in all_models():
-    #     print(model.to_class())
+    """print some test data"""
+    # print(json.dumps(create_test_response("s3control", "get-public-access-block"), indent=2))
+
+    """print the class models"""
+    for model in all_models():
+        print(model.to_class())

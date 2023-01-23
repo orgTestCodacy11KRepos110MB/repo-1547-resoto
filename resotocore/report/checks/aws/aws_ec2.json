@@ -653,7 +653,7 @@
             "risk": "Public access policies may be applied to sensitive data buckets.",
             "severity": "high",
             "detect": {
-                "manual": "Check if Amazon Macie is enabled."
+                "resoto": "is(aws_s3_bucket) {account_setting: <-[0:]- is(aws_account) --> is(aws_s3_account_settings)} (bucket_public_access_block_configuration.block_public_acls==false and account_setting.reported.bucket_public_access_block_configuration.block_public_acls==false) or (bucket_public_access_block_configuration.ignore_public_acls==false and account_setting.reported.bucket_public_access_block_configuration.ignore_public_acls==false) or (bucket_public_access_block_configuration.block_public_policy==false and account_setting.reported.bucket_public_access_block_configuration.block_public_policy==false) or (bucket_public_access_block_configuration.restrict_public_buckets==false and account_setting.reported.bucket_public_access_block_configuration.restrict_public_buckets==false)"
             },
             "remediation": {
                 "action": {
